@@ -5,22 +5,16 @@ import { CyberBackground } from '../components/svg/CyberBackground';
 import { RoleBadgeInline } from '../components/svg/RoleBadge';
 import { SendIcon, WifiIcon, AlertIcon } from '../components/svg/Icons';
 import { UpgradeModal } from '../components/UpgradeModal';
+import { supabase } from '../lib/supabase';
 
 interface Message {
   id: string;
+  userId: string;
   username: string;
   role: 'super_pobre' | 'compi_pro' | 'dios_admin';
   content: string;
   time: string;
 }
-
-const MOCK_MESSAGES: Message[] = [
-  { id: '1', username: 'KaliAdmin', role: 'dios_admin', content: '¡Bienvenidos a la red, compis! 👑 El sistema está activo.', time: '22:01' },
-  { id: '2', username: 'CompiPro_777', role: 'compi_pro', content: 'Qué crack el sistema nuevo 🔥 Todo fluye rápido.', time: '22:03' },
-  { id: '3', username: 'Pelado_Dev', role: 'super_pobre', content: 'Todo bonito pero sin feria pa upgrade jajaja 💀', time: '22:05' },
-  { id: '4', username: 'KaliAdmin', role: 'dios_admin', content: 'Yapea noma pata, solo 5 soles 😂 948097148', time: '22:06' },
-  { id: '5', username: 'CompiPro_777', role: 'compi_pro', content: 'Vale la pena la suscripción, las fotos en HD salen brutales.', time: '22:08' },
-];
 
 const GLOBAL_ANNOUNCEMENT = {
   active: false,
@@ -29,11 +23,12 @@ const GLOBAL_ANNOUNCEMENT = {
 
 export default function HomePage() {
   const { user } = useAuth();
-  const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [announcement, setAnnouncement] = useState(GLOBAL_ANNOUNCEMENT);
   const [wordCount, setWordCount] = useState(user?.word_count || 0);
+  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const chatWordLimit =
@@ -41,18 +36,47 @@ export default function HomePage() {
       ? (user.is_demo ? 10 : 50)
       : null;
 
-  useEffect(() => {
-    if (!user) return;
-    const key = `kali_chat_words:${user.id}`;
-    const stored = localStorage.getItem(key);
-    if (stored) {
-      const parsed = Number(stored);
-      if (!Number.isNaN(parsed)) setWordCount(parsed);
-    }
-  }, [user]);
+  const mapMessage = (row: any): Message => ({
+    id: row.id,
+    userId: row.user_id,
+    username: row.profiles?.username ?? 'Anon',
+    role: row.profiles?.role ?? 'super_pobre',
+    content: row.content,
+    time: new Date(row.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
+  });
+
+  const loadMessages = async () => {
+    const { data } = await supabase
+      .from('chat_messages')
+      .select('id,user_id,content,created_at,profiles:user_id(username,role)')
+      .order('created_at', { ascending: true })
+      .limit(120);
+
+    if (!data) return;
+    setMessages(data.map(mapMessage));
+  };
 
   useEffect(() => {
     if (!user) return;
+    if (user.is_demo) {
+      const key = `kali_chat_words:${user.id}`;
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const parsed = Number(stored);
+        if (!Number.isNaN(parsed)) setWordCount(parsed);
+      }
+      return;
+    }
+
+    const loadProfileCount = async () => {
+      const { data } = await supabase.from('profiles').select('word_count').eq('id', user.id).maybeSingle();
+      if (data?.word_count !== undefined) setWordCount(data.word_count);
+    };
+    loadProfileCount();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !user.is_demo) return;
     const key = `kali_chat_words:${user.id}`;
     localStorage.setItem(key, String(wordCount));
   }, [user, wordCount]);
@@ -61,23 +85,23 @@ export default function HomePage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Simulate realtime message from another user
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        username: 'CompiPro_777',
-        role: 'compi_pro',
-        content: '¿Alguien probando el chat en tiempo real? 🔴',
-        time: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
-      }]);
-    }, 5000);
-    return () => clearTimeout(timer);
+    loadMessages();
+    const channel = supabase
+      .channel('chat_messages_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, () => {
+        loadMessages();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const getWordCountFromText = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim() || !user) return;
 
     const newWords = getWordCountFromText(input);
@@ -88,17 +112,40 @@ export default function HomePage() {
       return;
     }
 
-    const msg: Message = {
-      id: Date.now().toString(),
-      username: user.username,
-      role: user.role,
-      content: input.trim(),
-      time: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
-    };
+    if (user.is_demo) {
+      const msg: Message = {
+        id: Date.now().toString(),
+        userId: user.id,
+        username: user.username,
+        role: user.role,
+        content: input.trim(),
+        time: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages(prev => [...prev, msg]);
+      setWordCount(w => w + newWords);
+      setInput('');
+      return;
+    }
 
-    setMessages(prev => [...prev, msg]);
-    setWordCount(w => w + newWords);
+    setSending(true);
+    const content = input.trim();
+    const { error } = await supabase.from('chat_messages').insert({
+      user_id: user.id,
+      content,
+    });
+
+    if (!error && user.role === 'super_pobre') {
+      const next = totalWords;
+      setWordCount(next);
+      await supabase.from('profiles').update({ word_count: next }).eq('id', user.id);
+    }
+
+    if (!error) {
+      loadMessages();
+    }
+
     setInput('');
+    setSending(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -183,7 +230,7 @@ export default function HomePage() {
               <span className="font-mono font-bold text-sm" style={{ color: '#39ff14' }}>LIVE CHAT</span>
             </div>
             <span className="text-xs font-mono hidden sm:block" style={{ color: '#4c1d95' }}>
-              {messages.length} mensajes · {Math.floor(Math.random() * 5) + 3} online
+              {messages.length} mensajes · realtime activo
             </span>
           </div>
 
@@ -206,13 +253,13 @@ export default function HomePage() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3" style={{ scrollbarWidth: 'thin', scrollbarColor: '#4c1d95 transparent' }}>
           {messages.map((msg, index) => {
-            const isOwn = msg.username === user?.username;
+            const isOwn = msg.userId === user?.id;
             return (
               <motion.div
                 key={msg.id}
                 initial={{ opacity: 0, y: 15, x: isOwn ? 15 : -15 }}
                 animate={{ opacity: 1, y: 0, x: 0 }}
-                transition={{ duration: 0.3, delay: index < MOCK_MESSAGES.length ? 0 : 0 }}
+                transition={{ duration: 0.3, delay: index < 6 ? 0 : 0 }}
                 className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
               >
                 <div style={{ maxWidth: '80%' }}>
@@ -316,18 +363,18 @@ export default function HomePage() {
               </div>
               <motion.button
                 onClick={handleSend}
-                disabled={!input.trim()}
+                disabled={!input.trim() || sending}
                 className="p-3 rounded-xl transition-all"
                 style={{
-                  background: input.trim() ? 'linear-gradient(135deg,#7c3aed,#a855f7)' : 'rgba(0,0,0,0.3)',
-                  border: `1px solid ${input.trim() ? '#a855f7' : 'rgba(168,85,247,0.2)'}`,
-                  cursor: input.trim() ? 'pointer' : 'not-allowed',
-                  boxShadow: input.trim() ? '0 0 15px rgba(168,85,247,0.3)' : 'none',
+                  background: input.trim() && !sending ? 'linear-gradient(135deg,#7c3aed,#a855f7)' : 'rgba(0,0,0,0.3)',
+                  border: `1px solid ${input.trim() && !sending ? '#a855f7' : 'rgba(168,85,247,0.2)'}`,
+                  cursor: input.trim() && !sending ? 'pointer' : 'not-allowed',
+                  boxShadow: input.trim() && !sending ? '0 0 15px rgba(168,85,247,0.3)' : 'none',
                 }}
-                whileHover={input.trim() ? { scale: 1.05 } : {}}
-                whileTap={input.trim() ? { scale: 0.95 } : {}}
+                whileHover={input.trim() && !sending ? { scale: 1.05 } : {}}
+                whileTap={input.trim() && !sending ? { scale: 0.95 } : {}}
               >
-                <SendIcon size={20} color={input.trim() ? '#fff' : '#4c1d95'} />
+                <SendIcon size={20} color={input.trim() && !sending ? '#fff' : '#4c1d95'} />
               </motion.button>
             </div>
           )}

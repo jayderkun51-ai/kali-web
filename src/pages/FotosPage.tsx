@@ -1,13 +1,15 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { CyberBackground } from '../components/svg/CyberBackground';
 import { RoleBadgeInline } from '../components/svg/RoleBadge';
 import { UploadIcon, PhotoIcon, CloseIcon } from '../components/svg/Icons';
 import { UpgradeModal } from '../components/UpgradeModal';
+import { supabase } from '../lib/supabase';
 
 interface WallPhoto {
   id: string;
+  userId: string;
   username: string;
   role: 'super_pobre' | 'compi_pro' | 'dios_admin';
   url: string;
@@ -16,37 +18,16 @@ interface WallPhoto {
   height: number;
 }
 
-// Mock photos with cyber/tech themed SVG data URLs
-const generateSvgPhoto = (id: number) => {
-  const colors = [
-    ['#1a0033', '#a855f7', '#d946ef'],
-    ['#001a0d', '#39ff14', '#00ff88'],
-    ['#1a1000', '#fbbf24', '#f97316'],
-    ['#001a1a', '#06b6d4', '#0ea5e9'],
-    ['#1a000d', '#ec4899', '#f43f5e'],
-  ];
-  const c = colors[id % colors.length];
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><defs><radialGradient id='g${id}' cx='50%' cy='50%' r='60%'><stop offset='0%' stop-color='${c[1]}' stop-opacity='0.3'/><stop offset='100%' stop-color='${c[0]}'/></radialGradient></defs><rect width='400' height='300' fill='${c[0]}'/><rect width='400' height='300' fill='url(%23g${id})'/><line x1='0' y1='50' x2='400' y2='50' stroke='${c[1]}' stroke-width='0.5' opacity='0.3'/><line x1='0' y1='150' x2='400' y2='150' stroke='${c[1]}' stroke-width='0.5' opacity='0.3'/><line x1='0' y1='250' x2='400' y2='250' stroke='${c[1]}' stroke-width='0.5' opacity='0.3'/><line x1='100' y1='0' x2='100' y2='300' stroke='${c[2]}' stroke-width='0.5' opacity='0.3'/><line x1='200' y1='0' x2='200' y2='300' stroke='${c[2]}' stroke-width='0.5' opacity='0.3'/><line x1='300' y1='0' x2='300' y2='300' stroke='${c[2]}' stroke-width='0.5' opacity='0.3'/><circle cx='200' cy='150' r='60' fill='none' stroke='${c[1]}' stroke-width='1' opacity='0.5'/><circle cx='200' cy='150' r='30' fill='${c[1]}' opacity='0.1'/><text x='200' y='158' font-family='monospace' font-size='14' fill='${c[1]}' text-anchor='middle' font-weight='bold'>KALI-WEB</text><text x='200' y='175' font-family='monospace' font-size='9' fill='${c[2]}' text-anchor='middle'>CYBER-BARRIO NET</text><text x='10' y='20' font-family='monospace' font-size='8' fill='${c[1]}' opacity='0.5'>0x${(id * 1337).toString(16).toUpperCase()}</text></svg>`;
-  return `data:image/svg+xml,${svg}`;
-};
-
-const MOCK_PHOTOS: WallPhoto[] = [
-  { id: '1', username: 'KaliAdmin', role: 'dios_admin', url: generateSvgPhoto(0), caption: 'El servidor nuevo está brutal 🖥️', time: '21:30', height: 200 },
-  { id: '2', username: 'CompiPro_777', role: 'compi_pro', url: generateSvgPhoto(1), caption: 'Setup cyberpunk terminado 🎮', time: '21:45', height: 260 },
-  { id: '3', username: 'Pelado_Dev', role: 'super_pobre', url: generateSvgPhoto(2), caption: 'Primer foto del muro jaja', time: '22:00', height: 180 },
-  { id: '4', username: 'CompiPro_777', role: 'compi_pro', url: generateSvgPhoto(3), caption: 'La IA generando código solo 🤖', time: '22:10', height: 240 },
-  { id: '5', username: 'KaliAdmin', role: 'dios_admin', url: generateSvgPhoto(4), caption: 'Red encriptada y funcionando 🔐', time: '22:20', height: 210 },
-  { id: '6', username: 'CompiPro_777', role: 'compi_pro', url: generateSvgPhoto(0), caption: 'Monitor triple setup completo', time: '22:25', height: 190 },
-];
-
 export default function FotosPage() {
   const { user } = useAuth();
-  const [photos, setPhotos] = useState<WallPhoto[]>(MOCK_PHOTOS);
+  const [photos, setPhotos] = useState<WallPhoto[]>([]);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [captionInput, setCaptionInput] = useState('');
   const [showUpload, setShowUpload] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<WallPhoto | null>(null);
   const [photoCount, setPhotoCount] = useState(user?.photo_count || 0);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const isBlocked = user?.role === 'super_pobre' && photoCount >= 5;
@@ -59,21 +40,142 @@ export default function FotosPage() {
     setShowUpload(true);
   };
 
-  const handlePhotoSubmit = () => {
+  const randomHeightById = (id: string) => {
+    const seed = id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+    return 180 + (seed % 90);
+  };
+
+  const mapPhoto = (row: any): WallPhoto => ({
+    id: row.id,
+    userId: row.user_id,
+    username: row.profiles?.username ?? 'Anon',
+    role: row.profiles?.role ?? 'super_pobre',
+    url: row.image_url,
+    caption: row.caption ?? '',
+    time: new Date(row.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
+    height: randomHeightById(row.id),
+  });
+
+  const loadPhotos = async () => {
+    const { data } = await supabase
+      .from('wall_photos')
+      .select('id,user_id,image_url,caption,created_at,profiles:user_id(username,role)')
+      .order('created_at', { ascending: false })
+      .limit(180);
+    if (data) setPhotos(data.map(mapPhoto));
+  };
+
+  const loadPhotoCount = async () => {
     if (!user) return;
-    const newPhoto: WallPhoto = {
-      id: Date.now().toString(),
-      username: user.username,
-      role: user.role,
-      url: generateSvgPhoto(Math.floor(Math.random() * 5)),
-      caption: captionInput || 'Sin caption',
-      time: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
-      height: 180 + Math.floor(Math.random() * 80),
+    if (user.is_demo) {
+      setPhotoCount(user.photo_count ?? 0);
+      return;
+    }
+    const { count } = await supabase
+      .from('wall_photos')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+    setPhotoCount(count ?? 0);
+  };
+
+  const compressFile = (file: File, quality: number): Promise<Blob> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      const src = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxWidth = 1600;
+        const ratio = Math.min(1, maxWidth / img.width);
+        canvas.width = Math.round(img.width * ratio);
+        canvas.height = Math.round(img.height * ratio);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          URL.revokeObjectURL(src);
+          reject(new Error('No se pudo comprimir imagen'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(
+          blob => {
+            URL.revokeObjectURL(src);
+            if (blob) resolve(blob);
+            else reject(new Error('No se pudo generar blob'));
+          },
+          'image/jpeg',
+          quality,
+        );
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(src);
+        reject(new Error('Imagen inválida'));
+      };
+      img.src = src;
+    });
+
+  useEffect(() => {
+    loadPhotos();
+    if (user) loadPhotoCount();
+
+    const channel = supabase
+      .channel('wall_photos_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wall_photos' }, () => {
+        loadPhotos();
+        if (user) loadPhotoCount();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
-    setPhotos(prev => [newPhoto, ...prev]);
-    setPhotoCount(c => c + 1);
-    setCaptionInput('');
-    setShowUpload(false);
+  }, [user?.id]);
+
+  const handlePhotoSubmit = async () => {
+    if (!user) return;
+    if (!selectedFile) return;
+
+    if (user.role === 'super_pobre' && photoCount >= 5) {
+      setUpgradeOpen(true);
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const quality = user.role === 'super_pobre' ? 0.45 : 0.92;
+      const blob = await compressFile(selectedFile, quality);
+      const ext = 'jpg';
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
+      const bucket = user.role === 'super_pobre' ? 'kali-wall-compressed' : 'kali-wall-hd';
+      const path = `${user.id}/${fileName}`;
+
+      const { error: uploadErr } = await supabase.storage.from(bucket).upload(path, blob, {
+        contentType: 'image/jpeg',
+        upsert: false,
+      });
+      if (uploadErr) throw uploadErr;
+
+      const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
+      const imageUrl = pub.publicUrl;
+
+      const { error: insertErr } = await supabase.from('wall_photos').insert({
+        user_id: user.id,
+        image_url: imageUrl,
+        storage_path: `${bucket}/${path}`,
+        caption: captionInput.trim() || null,
+      });
+      if (insertErr) throw insertErr;
+
+      if (user.role === 'super_pobre') {
+        await supabase.from('profiles').update({ photo_count: photoCount + 1 }).eq('id', user.id);
+      }
+
+      await loadPhotos();
+      await loadPhotoCount();
+      setCaptionInput('');
+      setSelectedFile(null);
+      setShowUpload(false);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const nameColor = (role: string) =>
@@ -219,7 +321,7 @@ export default function FotosPage() {
                 </div>
 
                 {/* Drop zone */}
-                <div
+              <div
                   onClick={() => fileRef.current?.click()}
                   className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer mb-4 transition-all"
                   style={{ borderColor: 'rgba(168,85,247,0.3)', background: 'rgba(0,0,0,0.3)' }}
@@ -227,7 +329,18 @@ export default function FotosPage() {
                   <PhotoIcon size={32} color="#a855f7" className="mx-auto mb-2" />
                   <p className="font-mono text-sm" style={{ color: '#a855f7' }}>Click para seleccionar foto</p>
                   <p className="font-mono text-xs mt-1" style={{ color: '#4c1d95' }}>JPG, PNG, WEBP · Max 10MB</p>
-                  <input ref={fileRef} type="file" accept="image/*" className="hidden" />
+                  {selectedFile && (
+                    <p className="font-mono text-xs mt-2" style={{ color: '#39ff14' }}>
+                      Archivo: {selectedFile.name}
+                    </p>
+                  )}
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => setSelectedFile(e.target.files?.[0] ?? null)}
+                  />
                 </div>
 
                 <input
@@ -245,19 +358,20 @@ export default function FotosPage() {
 
                 <motion.button
                   onClick={handlePhotoSubmit}
+                  disabled={!selectedFile || uploading}
                   className="w-full py-3 font-mono font-bold text-sm"
                   style={{
-                    background: 'linear-gradient(135deg,#7c3aed,#a855f7)',
+                    background: !selectedFile || uploading ? 'rgba(0,0,0,0.3)' : 'linear-gradient(135deg,#7c3aed,#a855f7)',
                     border: 'none',
                     borderRadius: '10px',
                     color: '#fff',
-                    cursor: 'pointer',
-                    boxShadow: '0 0 20px rgba(168,85,247,0.3)',
+                    cursor: !selectedFile || uploading ? 'not-allowed' : 'pointer',
+                    boxShadow: !selectedFile || uploading ? 'none' : '0 0 20px rgba(168,85,247,0.3)',
                   }}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={!selectedFile || uploading ? {} : { scale: 1.02 }}
+                  whileTap={!selectedFile || uploading ? {} : { scale: 0.98 }}
                 >
-                  ▲ PUBLICAR EN EL MURO
+                  {uploading ? 'Subiendo...' : '▲ PUBLICAR EN EL MURO'}
                 </motion.button>
               </div>
             </motion.div>

@@ -1,5 +1,20 @@
 # Kali-Web Supabase Setup
 
+## 0) Automatizar Storage + avatares + Realtime (recomendado)
+Después de haber corrido `supabase/schema.sql` y `supabase/storage_policies.sql` al menos una vez:
+
+**Opción A — un solo SQL en el Dashboard**  
+Supabase → **SQL Editor** → pega y ejecuta el archivo **`supabase/automate_all.sql`**.  
+Crea los buckets (`kali-wall-compressed`, `kali-wall-hd`, `kali-avatars`), policies de avatares y registra tablas en Realtime (sin duplicar si ya existían).
+
+**Opción B — desde tu PC con CLI**  
+```bash
+npx supabase@latest login
+npx supabase@latest link --project-ref TU_PROJECT_REF
+npm run db:auto
+```
+En Windows también: `npm run db:auto:win`
+
 ## 1) Env vars
 Use these in local and Vercel:
 
@@ -51,23 +66,13 @@ set role = 'dios_admin'
 where email = 'TU_CORREO@MAIL.COM';
 ```
 
-## 6) Storage buckets (required for wall photos)
-Create these buckets in Supabase:
+## 6) Storage + Realtime + avatares (manual por partes)
+Si **no** usas la sección **0)**, haz lo siguiente:
 
-- `kali-wall-compressed`
-- `kali-wall-hd`
+- Buckets públicos: `kali-wall-compressed`, `kali-wall-hd`, `kali-avatars` (Dashboard → Storage).
+- Políticas del muro: `supabase/storage_policies.sql`
+- Políticas de avatar: `supabase/storage_avatars.sql`
+- Realtime: `supabase/realtime_publication.sql` (puede fallar si la tabla ya estaba en la publicación; mejor **`automate_all.sql`**).
 
-For the current frontend implementation, set both buckets to **PUBLIC** so image URLs work via public URLs.
-If you prefer PRIVATE buckets, ask and we’ll switch the app to signed URLs.
-
-## 7) Realtime (chat + muro + anuncios sin “placebo”)
-Para que los `postgres_changes` lleguen al navegador, las tablas deben estar en la publicación `supabase_realtime`. Ejecuta en SQL Editor:
-
-- `supabase/realtime_publication.sql`
-
-Si una tabla ya estaba añadida, Postgres devolverá error “already member”; comenta esa línea y vuelve a ejecutar.
-
-## 8) Fotos de perfil (bucket `kali-avatars`)
-1. En **Storage → New bucket** crea **`kali-avatars`** como **público**.
-2. Ejecuta `supabase/storage_avatars.sql` en el SQL Editor (políticas por carpeta `userId/...`).
+Los buckets deben ser **PUBLIC** con el frontend actual (URLs públicas).
 

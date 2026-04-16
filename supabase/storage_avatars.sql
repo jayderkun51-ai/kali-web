@@ -1,6 +1,6 @@
 -- Políticas Storage para fotos de perfil (bucket: kali-avatars)
--- 1) En Dashboard → Storage → crear bucket público llamado: kali-avatars
--- 2) Ejecutar este script en SQL Editor.
+-- Recomendado: usa `supabase/automate_all.sql` (crea bucket + policies + realtime en un solo paso)
+-- o ejecuta este archivo solo después de crear el bucket manualmente.
 
 drop policy if exists "kali_read_avatar_objects" on storage.objects;
 drop policy if exists "kali_insert_avatar_objects_owner" on storage.objects;

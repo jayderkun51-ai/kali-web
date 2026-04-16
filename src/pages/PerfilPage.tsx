@@ -46,7 +46,14 @@ export default function PerfilPage() {
 
       await refreshUser();
     } catch (e: any) {
-      setErr(e?.message || 'No se pudo subir. ¿Creaste el bucket kali-avatars en Supabase?');
+      const raw = String(e?.message ?? e ?? '');
+      if (/bucket not found|not found/i.test(raw)) {
+        setErr(
+          'Falta el bucket en Supabase (no es el tipo de foto). Ve a Storage → New bucket → nombre exacto: kali-avatars → público. Luego ejecuta supabase/storage_avatars.sql en el SQL Editor.',
+        );
+      } else {
+        setErr(raw || 'No se pudo subir la imagen.');
+      }
     } finally {
       setBusy(false);
     }

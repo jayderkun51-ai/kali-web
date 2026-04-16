@@ -7,6 +7,7 @@ import { CyberBackground } from '../components/svg/CyberBackground';
 import { MailIcon, KeyIcon, UserIcon, TerminalIcon, GlitchBarsIcon } from '../components/svg/Icons';
 
 type AuthStep = 'boot' | 'choice' | 'login' | 'register' | 'otp';
+const OTP_LEN = 8;
 
 const BOOT_LINES = [
   '> Initializing KALI-WEB kernel v2.4.7...',
@@ -32,13 +33,13 @@ export default function LoginPage() {
   const [bootIndex, setBootIndex] = useState(0);
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otp, setOtp] = useState<string[]>(Array.from({ length: OTP_LEN }, () => ''));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [glitch, setGlitch] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const navigate = useNavigate();
-  const { loginDemo, user } = useAuth();
+  const { loginDemo, user, sendEmailOtp, verifyEmailOtp } = useAuth();
 
   useEffect(() => {
     if (user) navigate('/home');
@@ -71,7 +72,7 @@ export default function LoginPage() {
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
-    if (value && index < 5) {
+    if (value && index < OTP_LEN - 1) {
       otpRefs.current[index + 1]?.focus();
     }
   };
@@ -93,27 +94,46 @@ export default function LoginPage() {
     }, 1200);
   };
 
-  const handleSendOtp = async () => {
-    if (!email) { setError('Ingresa tu correo, pata.'); return; }
+  const handleSendOtp = async (mode: 'login' | 'register') => {
+    if (!email.trim()) {
+      setError('Ingresa tu correo, pata.');
+      return;
+    }
+    if (mode === 'register' && !username.trim()) {
+      setError('Pon tu nombre de usuario, causa.');
+      return;
+    }
+
     setLoading(true);
     setError('');
-    // Simulate OTP send
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await sendEmailOtp({ email, username, mode });
+      setOtp(Array.from({ length: OTP_LEN }, () => ''));
       setStep('otp');
-    }, 1500);
+    } catch (e: any) {
+      setError(e?.message || 'No se pudo enviar el código.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleVerifyOtp = async () => {
-    const code = otp.join('');
-    if (code.length < 6) { setError('Ingresa los 6 dígitos, pe.'); return; }
+    const code = otp.join('').trim();
+    // Supabase can send different lengths depending on settings/templates.
+    if (code.length < 6) {
+      setError('Ingresa el código completo (6–8 dígitos).');
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      // Demo: any 6-digit code works, login as free user
-      loginDemo('free@kali.web');
+    setError('');
+    try {
+      await verifyEmailOtp({ email, token: code });
       navigate('/home');
-    }, 1200);
+    } catch (e: any) {
+      setError(e?.message || 'Código inválido o expirado.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -370,7 +390,7 @@ export default function LoginPage() {
                   </div>
 
                   <motion.button
-                    onClick={handleSendOtp}
+                    onClick={() => handleSendOtp('login')}
                     disabled={loading}
                     className="w-full py-3 font-mono font-bold text-sm tracking-wider"
                     style={{
@@ -492,7 +512,7 @@ export default function LoginPage() {
                   </div>
 
                   <motion.button
-                    onClick={handleSendOtp}
+                    onClick={() => handleSendOtp('register')}
                     disabled={loading}
                     className="w-full py-3 font-mono font-bold text-sm tracking-wider"
                     style={{
@@ -535,7 +555,7 @@ export default function LoginPage() {
                 <KaliLogo size={70} />
                 <h2 className="mt-3 text-xl font-black font-mono" style={{ color: '#a855f7' }}>CÓDIGO OTP</h2>
                 <p className="text-xs font-mono mt-1 text-center" style={{ color: '#6b7280' }}>
-                  Revisa tu correo · Código de 6 dígitos
+                  Revisa tu correo · Código de 8 dígitos
                 </p>
               </div>
 
@@ -616,7 +636,7 @@ export default function LoginPage() {
                     ← Volver
                   </button>
                   <button
-                    onClick={handleSendOtp}
+                    onClick={() => handleSendOtp('login')}
                     className="text-xs font-mono py-1 px-2"
                     style={{ color: '#39ff14', background: 'none', border: 'none', cursor: 'pointer' }}
                   >

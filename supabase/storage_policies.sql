@@ -9,8 +9,9 @@
 --
 -- If you prefer PRIVATE buckets, tell me and I’ll switch the frontend to signed URLs.
 
--- Enable RLS on storage objects (usually already enabled in Supabase projects)
-alter table if exists storage.objects enable row level security;
+-- NOTE: Do NOT ALTER storage.objects here.
+-- Supabase Storage owns that table, and enabling RLS requires table ownership.
+-- Storage RLS is typically already enabled by default in Supabase projects.
 
 -- Helper: check current user's role from profiles (safe: NOT user_metadata)
 create or replace function public.current_role()

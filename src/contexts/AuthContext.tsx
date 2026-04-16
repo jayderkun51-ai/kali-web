@@ -1,5 +1,29 @@
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import type { User } from '@supabase/supabase-js';
 import { supabase, UserProfile } from '../lib/supabase';
+
+/** Perfil mínimo desde JWT (sin esperar a `profiles`); evita pantalla infinita si la DB tarda o falla. */
+function draftProfileFromAuthUser(authUser: User): UserProfile {
+  const email = authUser.email ?? '';
+  const pendingUsernameKey = `kali_pending_username:${email}`;
+  const pendingUsername = (localStorage.getItem(pendingUsernameKey) || '').trim();
+  const fallbackUsername =
+    pendingUsername || (email ? email.split('@')[0] : `user_${authUser.id.slice(0, 6)}`);
+  return {
+    id: authUser.id,
+    email,
+    username: fallbackUsername,
+    role: 'super_pobre',
+    created_at: new Date().toISOString(),
+    banned: false,
+    word_count: 0,
+    photo_count: 0,
+  };
+}
+
+function applyLocalUser(profile: UserProfile) {
+  localStorage.setItem('kali_user', JSON.stringify(profile));
+}
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -75,7 +99,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
 
         if (data.session?.user) {
-          await hydrateFromSupabase();
+          const draft = draftProfileFromAuthUser(data.session.user);
+          setUser(draft);
+          applyLocalUser(draft);
+          void hydrateFromSupabase();
           return;
         }
 
@@ -99,13 +126,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (cancelled) return;
       if (session?.user) {
-        try {
-          await hydrateFromSupabase();
-        } catch {
-          setUser(prev => prev);
-        } finally {
-          setLoading(false);
-        }
+        const draft = draftProfileFromAuthUser(session.user);
+        setUser(draft);
+        applyLocalUser(draft);
+        void hydrateFromSupabase().catch(() => {});
+        setLoading(false);
       } else {
         // If a demo user is active, keep it. Otherwise clear.
         setUser(prev => (prev && demoUserIds.has(prev.id) ? prev : null));
@@ -135,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!selectErr && existing) {
       setUser(existing as UserProfile);
-      localStorage.setItem('kali_user', JSON.stringify(existing));
+      applyLocalUser(existing as UserProfile);
       return;
     }
 
@@ -166,11 +191,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select('*')
         .single();
 
-      setUser((upserted ?? draft) as UserProfile);
-      localStorage.setItem('kali_user', JSON.stringify(upserted ?? draft));
+      const next = (upserted ?? draft) as UserProfile;
+      setUser(next);
+      applyLocalUser(next);
     } catch {
       setUser(draft);
-      localStorage.setItem('kali_user', JSON.stringify(draft));
+      applyLocalUser(draft);
     }
   };
 
@@ -227,7 +253,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const verifyEmailOtp: AuthContextType['verifyEmailOtp'] = async ({ email, token }) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanToken = token.replace(/\D/g, '').trim();
-    const { error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.verifyOtp({
       email: cleanEmail,
       token: cleanToken,
       type: 'email',
@@ -236,7 +262,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const msg = `${error.message}${(error as any).status ? ` (status ${(error as any).status})` : ''}`;
       throw new Error(msg);
     }
-    // Don't block OTP success on profile hydration/network delays.
+    const authUser = data.session?.user ?? (await supabase.auth.getSession()).data.session?.user;
+    if (authUser) {
+      const draft = draftProfileFromAuthUser(authUser);
+      setUser(draft);
+      applyLocalUser(draft);
+      setLoading(false);
+    }
     void hydrateFromSupabase().catch(() => {});
   };
 

@@ -132,7 +132,9 @@ export default function LoginPage() {
       // Hard timeout so the UI never gets stuck on "Verificando..."
       await Promise.race([
         verifyEmailOtp({ email, token: code }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout verificando OTP. Reintenta.')), 15000)),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout verificando OTP. Reintenta.')), 60000),
+        ),
       ]);
       navigate('/home');
     } catch (e: any) {

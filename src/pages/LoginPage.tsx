@@ -118,16 +118,20 @@ export default function LoginPage() {
   };
 
   const handleVerifyOtp = async () => {
-    const code = otp.join('').trim();
-    // Supabase can send different lengths depending on settings/templates.
-    if (code.length < 6) {
-      setError('Ingresa el código completo (6–8 dígitos).');
+    const code = otp.join('').replace(/\D/g, '').trim();
+    // Supabase OTPs are typically 6 digits, but templates can use 8.
+    if (!(code.length === 6 || code.length === 8)) {
+      setError('Código inválido. Debe ser de 6 u 8 dígitos.');
       return;
     }
     setLoading(true);
     setError('');
     try {
-      await verifyEmailOtp({ email, token: code });
+      // Hard timeout so the UI never gets stuck on "Verificando..."
+      await Promise.race([
+        verifyEmailOtp({ email, token: code }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout verificando OTP. Reintenta.')), 15000)),
+      ]);
       navigate('/home');
     } catch (e: any) {
       setError(e?.message || 'Código inválido o expirado.');

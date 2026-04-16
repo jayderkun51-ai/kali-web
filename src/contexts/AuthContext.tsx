@@ -236,7 +236,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const msg = `${error.message}${(error as any).status ? ` (status ${(error as any).status})` : ''}`;
       throw new Error(msg);
     }
-    await hydrateFromSupabase();
+    // Don't block OTP success on profile hydration/network delays.
+    void hydrateFromSupabase().catch(() => {});
   };
 
   return (

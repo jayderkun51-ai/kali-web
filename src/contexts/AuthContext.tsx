@@ -69,35 +69,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     const load = async () => {
-      // 1) Prefer real Supabase session if present
-      const { data } = await supabase.auth.getSession();
-      if (cancelled) return;
+      try {
+        // 1) Prefer real Supabase session if present
+        const { data } = await supabase.auth.getSession();
+        if (cancelled) return;
 
-      if (data.session?.user) {
-        await hydrateFromSupabase();
-        if (!cancelled) setLoading(false);
-        return;
-      }
-
-      // 2) Fallback to demo/local user (Phase 1)
-      const stored = localStorage.getItem('kali_user');
-      if (stored) {
-        try {
-          setUser(JSON.parse(stored));
-        } catch {
-          localStorage.removeItem('kali_user');
+        if (data.session?.user) {
+          await hydrateFromSupabase();
+          return;
         }
+
+        // 2) Fallback to demo/local user (Phase 1)
+        const stored = localStorage.getItem('kali_user');
+        if (stored) {
+          try {
+            setUser(JSON.parse(stored));
+          } catch {
+            localStorage.removeItem('kali_user');
+          }
+        }
+      } catch {
+        // keep app usable even if profile bootstrap fails
+        setUser(null);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     };
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (cancelled) return;
       if (session?.user) {
-        await hydrateFromSupabase();
+        try {
+          await hydrateFromSupabase();
+        } catch {
+          setUser(prev => prev);
+        } finally {
+          setLoading(false);
+        }
       } else {
         // If a demo user is active, keep it. Otherwise clear.
         setUser(prev => (prev && demoUserIds.has(prev.id) ? prev : null));
+        setLoading(false);
       }
     });
 
@@ -146,15 +158,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       photo_count: 0,
     };
 
-    // Upsert profile (will succeed once DB is created).
-    const { data: upserted } = await supabase
-      .from('profiles')
-      .upsert(draft, { onConflict: 'id' })
-      .select('*')
-      .single();
+    // Upsert profile. If DB table/RLS is not ready, fallback to draft
+    try {
+      const { data: upserted } = await supabase
+        .from('profiles')
+        .upsert(draft, { onConflict: 'id' })
+        .select('*')
+        .single();
 
-    setUser((upserted ?? draft) as UserProfile);
-    localStorage.setItem('kali_user', JSON.stringify(upserted ?? draft));
+      setUser((upserted ?? draft) as UserProfile);
+      localStorage.setItem('kali_user', JSON.stringify(upserted ?? draft));
+    } catch {
+      setUser(draft);
+      localStorage.setItem('kali_user', JSON.stringify(draft));
+    }
   };
 
   const signOut = async () => {

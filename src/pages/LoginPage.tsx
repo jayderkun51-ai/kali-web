@@ -33,6 +33,7 @@ export default function LoginPage() {
   const [bootIndex, setBootIndex] = useState(0);
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
+  const [otpMode, setOtpMode] = useState<'login' | 'register'>('login');
   const [otp, setOtp] = useState<string[]>(Array.from({ length: OTP_LEN }, () => ''));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -108,6 +109,7 @@ export default function LoginPage() {
     setError('');
     try {
       await sendEmailOtp({ email, username, mode });
+      setOtpMode(mode);
       setOtp(Array.from({ length: OTP_LEN }, () => ''));
       setStep('otp');
     } catch (e: any) {
@@ -559,7 +561,7 @@ export default function LoginPage() {
                 <KaliLogo size={70} />
                 <h2 className="mt-3 text-xl font-black font-mono" style={{ color: '#a855f7' }}>CÓDIGO OTP</h2>
                 <p className="text-xs font-mono mt-1 text-center" style={{ color: '#6b7280' }}>
-                  Revisa tu correo · Código de 8 dígitos
+                  Revisa tu correo · Código de 6 u 8 dígitos
                 </p>
               </div>
 
@@ -640,7 +642,7 @@ export default function LoginPage() {
                     ← Volver
                   </button>
                   <button
-                    onClick={() => handleSendOtp('login')}
+                    onClick={() => handleSendOtp(otpMode)}
                     className="text-xs font-mono py-1 px-2"
                     style={{ color: '#39ff14', background: 'none', border: 'none', cursor: 'pointer' }}
                   >

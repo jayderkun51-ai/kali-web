@@ -10,6 +10,7 @@ Use these in local and Vercel:
 Open Supabase SQL Editor and run:
 
 - `supabase/schema.sql`
+- `supabase/storage_policies.sql`
 
 ## 3) Auth settings for numeric OTP
 In Supabase Dashboard:
@@ -49,4 +50,13 @@ update public.profiles
 set role = 'dios_admin'
 where email = 'TU_CORREO@MAIL.COM';
 ```
+
+## 6) Storage buckets (required for wall photos)
+Create these buckets in Supabase:
+
+- `kali-wall-compressed`
+- `kali-wall-hd`
+
+For the current frontend implementation, set both buckets to **PUBLIC** so image URLs work via public URLs.
+If you prefer PRIVATE buckets, ask and we’ll switch the app to signed URLs.
 

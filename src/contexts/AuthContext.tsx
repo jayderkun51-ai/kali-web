@@ -226,13 +226,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifyEmailOtp: AuthContextType['verifyEmailOtp'] = async ({ email, token }) => {
     const cleanEmail = email.trim().toLowerCase();
-    const cleanToken = token.trim();
+    const cleanToken = token.replace(/\D/g, '').trim();
     const { error } = await supabase.auth.verifyOtp({
       email: cleanEmail,
       token: cleanToken,
       type: 'email',
     });
-    if (error) throw error;
+    if (error) {
+      const msg = `${error.message}${(error as any).status ? ` (status ${(error as any).status})` : ''}`;
+      throw new Error(msg);
+    }
     await hydrateFromSupabase();
   };
 

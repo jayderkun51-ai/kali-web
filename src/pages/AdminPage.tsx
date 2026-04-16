@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,8 +7,9 @@ import { RoleBadgeInline } from '../components/svg/RoleBadge';
 import { KaliLogo } from '../components/svg/KaliLogo';
 import { ShieldIcon, BanIcon, CrownIcon, AlertIcon, AdminIcon, CloseIcon } from '../components/svg/Icons';
 import type { UserRole } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
-interface MockUser {
+interface AdminUser {
   id: string;
   username: string;
   email: string;
@@ -19,25 +20,20 @@ interface MockUser {
   joined: string;
 }
 
-const MOCK_USERS: MockUser[] = [
-  { id: '1', username: 'KaliAdmin', email: 'admin@kali.web', role: 'dios_admin', banned: false, word_count: 0, photo_count: 0, joined: '2024-01-01' },
-  { id: '2', username: 'CompiPro_777', email: 'pro@kali.web', role: 'compi_pro', banned: false, word_count: 0, photo_count: 3, joined: '2024-01-05' },
-  { id: '3', username: 'Pelado_Dev', email: 'free@kali.web', role: 'super_pobre', banned: false, word_count: 12, photo_count: 2, joined: '2024-01-10' },
-  { id: '4', username: 'NachoBravo', email: 'nacho@test.com', role: 'super_pobre', banned: true, word_count: 50, photo_count: 5, joined: '2024-01-12' },
-  { id: '5', username: 'MiriamCode', email: 'miriam@test.com', role: 'compi_pro', banned: false, word_count: 0, photo_count: 8, joined: '2024-01-15' },
-];
-
 type AdminTab = 'usuarios' | 'anuncios' | 'stats';
 
 export default function AdminPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [users, setUsers] = useState<MockUser[]>(MOCK_USERS);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [tab, setTab] = useState<AdminTab>('usuarios');
   const [announcement, setAnnouncement] = useState('');
   const [announcementSent, setAnnouncementSent] = useState(false);
-  const [confirmBan, setConfirmBan] = useState<MockUser | null>(null);
+  const [confirmBan, setConfirmBan] = useState<AdminUser | null>(null);
   const [glitch, setGlitch] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [announcementSending, setAnnouncementSending] = useState(false);
+  const [actionUserId, setActionUserId] = useState<string | null>(null);
 
   if (!user || user.role !== 'dios_admin') {
     return (
@@ -59,25 +55,86 @@ export default function AdminPage() {
     );
   }
 
-  const handleToggleBan = (targetUser: MockUser) => {
+  const mapAdminUser = (row: any): AdminUser => ({
+    id: row.id,
+    username: row.username,
+    email: row.email,
+    role: row.role,
+    banned: row.banned,
+    word_count: row.word_count,
+    photo_count: row.photo_count,
+    joined: row.created_at ? new Date(row.created_at).toISOString().slice(0, 10) : '-',
+  });
+
+  const loadUsers = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id,username,email,role,banned,word_count,photo_count,created_at')
+      .order('created_at', { ascending: true });
+    if (data) setUsers(data.map(mapAdminUser));
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    const init = async () => {
+      setLoading(true);
+      await loadUsers();
+      if (mounted) setLoading(false);
+    };
+    init();
+
+    const channel = supabase
+      .channel('admin_profiles_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        loadUsers();
+      })
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const handleToggleBan = async (targetUser: AdminUser) => {
     if (targetUser.role === 'dios_admin') return;
-    setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, banned: !u.banned } : u));
+    setActionUserId(targetUser.id);
+    await supabase
+      .from('profiles')
+      .update({ banned: !targetUser.banned })
+      .eq('id', targetUser.id);
+    await loadUsers();
     setConfirmBan(null);
+    setActionUserId(null);
   };
 
-  const handleChangeRole = (userId: string, newRole: UserRole) => {
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+  const handleChangeRole = async (userId: string, newRole: UserRole) => {
+    setActionUserId(userId);
+    await supabase
+      .from('profiles')
+      .update({ role: newRole })
+      .eq('id', userId);
+    await loadUsers();
+    setActionUserId(null);
   };
 
-  const handleSendAnnouncement = () => {
+  const handleSendAnnouncement = async () => {
     if (!announcement.trim()) return;
+    setAnnouncementSending(true);
     setGlitch(true);
-    setTimeout(() => {
-      setGlitch(false);
+    await supabase.from('global_announcements').update({ active: false }).eq('active', true);
+    const { error } = await supabase.from('global_announcements').insert({
+      content: announcement.trim(),
+      active: true,
+      created_by: user.id,
+    });
+    setGlitch(false);
+    if (!error) {
       setAnnouncementSent(true);
       setAnnouncement('');
       setTimeout(() => setAnnouncementSent(false), 3000);
-    }, 1000);
+    }
+    setAnnouncementSending(false);
   };
 
   const stats = {
@@ -177,6 +234,11 @@ export default function AdminPage() {
         {/* Tab: Usuarios */}
         {tab === 'usuarios' && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            {loading && (
+              <div className="mb-3 font-mono text-xs" style={{ color: '#39ff14' }}>
+                {'>'} Cargando usuarios...
+              </div>
+            )}
             <div className="space-y-3">
               {users.map(u => (
                 <motion.div
@@ -220,18 +282,19 @@ export default function AdminPage() {
                   </div>
 
                   {/* Actions */}
-                  {u.role !== 'dios_admin' && (
+                  {u.id !== user.id && (
                     <div className="flex items-center gap-2 flex-wrap">
                       {/* Role selector */}
                       <select
                         value={u.role}
                         onChange={e => handleChangeRole(u.id, e.target.value as UserRole)}
+                        disabled={actionUserId === u.id}
                         className="px-3 py-1.5 font-mono text-xs rounded-lg outline-none"
                         style={{
                           background: 'rgba(0,0,0,0.6)',
                           border: '1px solid rgba(168,85,247,0.3)',
                           color: '#a855f7',
-                          cursor: 'pointer',
+                          cursor: actionUserId === u.id ? 'not-allowed' : 'pointer',
                         }}
                       >
                         <option value="super_pobre">💀 Super Pobre</option>
@@ -242,12 +305,14 @@ export default function AdminPage() {
                       {/* Ban button */}
                       <motion.button
                         onClick={() => setConfirmBan(u)}
+                        disabled={actionUserId === u.id}
                         className="flex items-center gap-1 px-3 py-1.5 font-mono text-xs font-bold rounded-lg"
                         style={{
                           background: u.banned ? 'rgba(57,255,20,0.1)' : 'rgba(239,68,68,0.1)',
                           border: `1px solid ${u.banned ? 'rgba(57,255,20,0.3)' : 'rgba(239,68,68,0.3)'}`,
                           color: u.banned ? '#39ff14' : '#ef4444',
-                          cursor: 'pointer',
+                          cursor: actionUserId === u.id ? 'not-allowed' : 'pointer',
+                          opacity: actionUserId === u.id ? 0.6 : 1,
                         }}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
@@ -258,10 +323,10 @@ export default function AdminPage() {
                     </div>
                   )}
 
-                  {u.role === 'dios_admin' && (
+                  {u.id === user.id && (
                     <div className="flex items-center gap-2">
                       <CrownIcon size={18} color="#fbbf24" />
-                      <span className="font-mono text-xs" style={{ color: '#fbbf24' }}>Super Admin</span>
+                      <span className="font-mono text-xs" style={{ color: '#fbbf24' }}>Tu cuenta admin</span>
                     </div>
                   )}
                 </motion.div>
@@ -324,21 +389,21 @@ export default function AdminPage() {
 
               <motion.button
                 onClick={handleSendAnnouncement}
-                disabled={!announcement.trim()}
+                disabled={!announcement.trim() || announcementSending}
                 className="w-full py-4 font-mono font-black text-sm tracking-widest"
                 style={{
-                  background: announcement.trim() ? 'linear-gradient(135deg,#7c3aed,#d946ef)' : 'rgba(0,0,0,0.3)',
-                  border: `1px solid ${announcement.trim() ? '#d946ef' : 'rgba(168,85,247,0.2)'}`,
+                  background: announcement.trim() && !announcementSending ? 'linear-gradient(135deg,#7c3aed,#d946ef)' : 'rgba(0,0,0,0.3)',
+                  border: `1px solid ${announcement.trim() && !announcementSending ? '#d946ef' : 'rgba(168,85,247,0.2)'}`,
                   borderRadius: '12px',
                   color: '#fff',
-                  cursor: announcement.trim() ? 'pointer' : 'not-allowed',
-                  boxShadow: announcement.trim() ? '0 0 30px rgba(217,70,239,0.4)' : 'none',
-                  opacity: announcement.trim() ? 1 : 0.5,
+                  cursor: announcement.trim() && !announcementSending ? 'pointer' : 'not-allowed',
+                  boxShadow: announcement.trim() && !announcementSending ? '0 0 30px rgba(217,70,239,0.4)' : 'none',
+                  opacity: announcement.trim() && !announcementSending ? 1 : 0.5,
                 }}
-                whileHover={announcement.trim() ? { scale: 1.02, boxShadow: '0 0 50px rgba(217,70,239,0.6)' } : {}}
-                whileTap={announcement.trim() ? { scale: 0.98 } : {}}
+                whileHover={announcement.trim() && !announcementSending ? { scale: 1.02, boxShadow: '0 0 50px rgba(217,70,239,0.6)' } : {}}
+                whileTap={announcement.trim() && !announcementSending ? { scale: 0.98 } : {}}
               >
-                📡 LANZAR ANUNCIO GLOBAL A TODOS
+                {announcementSending ? 'Enviando anuncio...' : '📡 LANZAR ANUNCIO GLOBAL A TODOS'}
               </motion.button>
 
               <div className="mt-4 p-3 rounded-lg" style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)' }}>

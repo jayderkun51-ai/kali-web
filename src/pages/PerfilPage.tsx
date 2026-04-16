@@ -60,7 +60,7 @@ export default function PerfilPage() {
           {user.role === 'super_pobre' && (
             <div className="mt-4 rounded-xl p-4" style={{ background: 'rgba(55,65,81,0.25)', border: '1px solid rgba(55,65,81,0.55)' }}>
               <p className="font-mono text-xs" style={{ color: '#9ca3af' }}>
-                Chat: <span className="font-bold">{user.word_count}</span>/50 palabras
+                Chat: <span className="font-bold">{user.word_count}</span>/{user.is_demo ? 10 : 50} palabras
               </p>
               <p className="font-mono text-xs mt-1" style={{ color: '#9ca3af' }}>
                 Fotos: <span className="font-bold">{user.photo_count}</span>/5

@@ -166,7 +166,7 @@ export function Navbar() {
 
             {user.role === 'super_pobre' && (
               <div className="mb-3 p-2 rounded" style={{ background: 'rgba(55,65,81,0.3)', border: '1px solid rgba(55,65,81,0.5)' }}>
-                <p className="text-xs font-mono" style={{ color: '#9ca3af' }}>Chat: {user.word_count}/50 palabras</p>
+                <p className="text-xs font-mono" style={{ color: '#9ca3af' }}>Chat: {user.word_count}/{user.is_demo ? 10 : 50} palabras</p>
                 <p className="text-xs font-mono" style={{ color: '#9ca3af' }}>Fotos: {user.photo_count}/5</p>
               </div>
             )}

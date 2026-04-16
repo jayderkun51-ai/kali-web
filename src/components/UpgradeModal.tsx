@@ -5,9 +5,10 @@ interface UpgradeModalProps {
   isOpen: boolean;
   onClose: () => void;
   reason: 'chat' | 'photos';
+  chatWordLimit?: number;
 }
 
-export function UpgradeModal({ isOpen, onClose, reason }: UpgradeModalProps) {
+export function UpgradeModal({ isOpen, onClose, reason, chatWordLimit }: UpgradeModalProps) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -47,7 +48,9 @@ export function UpgradeModal({ isOpen, onClose, reason }: UpgradeModalProps) {
                     LÍMITE ALCANZADO
                   </h2>
                   <p className="text-xs font-mono" style={{ color: '#6b21a8' }}>
-                    {reason === 'chat' ? '> Chat bloqueado (50 palabras)' : '> Muro lleno (5 fotos)'}
+                    {reason === 'chat'
+                      ? `> Chat bloqueado (${chatWordLimit ?? 50} palabras)`
+                      : '> Muro lleno (5 fotos)'}
                   </p>
                 </div>
               </div>

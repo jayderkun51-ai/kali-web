@@ -29,6 +29,7 @@ const DEMO_USERS: Record<string, UserProfile> = {
     banned: false,
     word_count: 0,
     photo_count: 0,
+    is_demo: true,
   },
   'pro@kali.web': {
     id: 'pro-001',
@@ -39,6 +40,7 @@ const DEMO_USERS: Record<string, UserProfile> = {
     banned: false,
     word_count: 0,
     photo_count: 0,
+    is_demo: true,
   },
   'free@kali.web': {
     id: 'free-001',
@@ -47,8 +49,9 @@ const DEMO_USERS: Record<string, UserProfile> = {
     role: 'super_pobre',
     created_at: new Date().toISOString(),
     banned: false,
-    word_count: 12,
+    word_count: 0,
     photo_count: 2,
+    is_demo: true,
   },
 };
 

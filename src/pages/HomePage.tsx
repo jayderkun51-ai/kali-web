@@ -36,6 +36,27 @@ export default function HomePage() {
   const [wordCount, setWordCount] = useState(user?.word_count || 0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const chatWordLimit =
+    user?.role === 'super_pobre'
+      ? (user.is_demo ? 10 : 50)
+      : null;
+
+  useEffect(() => {
+    if (!user) return;
+    const key = `kali_chat_words:${user.id}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      const parsed = Number(stored);
+      if (!Number.isNaN(parsed)) setWordCount(parsed);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const key = `kali_chat_words:${user.id}`;
+    localStorage.setItem(key, String(wordCount));
+  }, [user, wordCount]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -62,7 +83,7 @@ export default function HomePage() {
     const newWords = getWordCountFromText(input);
     const totalWords = wordCount + newWords;
 
-    if (user.role === 'super_pobre' && totalWords > 50) {
+    if (user.role === 'super_pobre' && chatWordLimit !== null && totalWords > chatWordLimit) {
       setUpgradeOpen(true);
       return;
     }
@@ -87,8 +108,15 @@ export default function HomePage() {
     }
   };
 
-  const isBlocked = user?.role === 'super_pobre' && wordCount >= 50;
-  const remaining = user?.role === 'super_pobre' ? Math.max(0, 50 - wordCount) : null;
+  const isBlocked =
+    user?.role === 'super_pobre' &&
+    chatWordLimit !== null &&
+    wordCount >= chatWordLimit;
+
+  const remaining =
+    user?.role === 'super_pobre' && chatWordLimit !== null
+      ? Math.max(0, chatWordLimit - wordCount)
+      : null;
 
   const nameColor = (role: string) =>
     role === 'dios_admin' ? '#d946ef' : role === 'compi_pro' ? '#fbbf24' : '#9ca3af';
@@ -319,7 +347,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      <UpgradeModal isOpen={upgradeOpen} onClose={() => setUpgradeOpen(false)} reason="chat" />
+      <UpgradeModal isOpen={upgradeOpen} onClose={() => setUpgradeOpen(false)} reason="chat" chatWordLimit={chatWordLimit ?? undefined} />
     </div>
   );
 }

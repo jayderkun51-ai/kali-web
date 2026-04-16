@@ -55,6 +55,11 @@ export interface UserProfile {
   banned: boolean;
   word_count: number;
   photo_count: number;
+  /**
+   * Local-only flag used during Phase 1 demos.
+   * Real auth/users will not rely on this for authorization.
+   */
+  is_demo?: boolean;
 }
 
 export interface ChatMessage {

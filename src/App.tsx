@@ -6,6 +6,7 @@ import HomePage from './pages/HomePage';
 import FotosPage from './pages/FotosPage';
 import AdminPage from './pages/AdminPage';
 import PerfilPage from './pages/PerfilPage';
+import AdminLoginPage from './pages/AdminLoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -54,6 +55,7 @@ function AppRoutes() {
           path="/"
           element={user ? <Navigate to="/home" replace /> : <LoginPage />}
         />
+        <Route path="/admin-login" element={<AdminLoginPage />} />
         <Route
           path="/home"
           element={

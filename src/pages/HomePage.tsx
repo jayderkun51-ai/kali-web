@@ -18,7 +18,7 @@ interface Message {
 
 const GLOBAL_ANNOUNCEMENT = {
   active: false,
-  content: '🚨 ANUNCIO GLOBAL: ¡Nuevo update disponible! El Admin manda saludos a todos los compis. 🎉',
+  content: '',
 };
 
 export default function HomePage() {
@@ -56,6 +56,22 @@ export default function HomePage() {
     setMessages(data.map(mapMessage));
   };
 
+  const loadAnnouncement = async () => {
+    const { data } = await supabase
+      .from('global_announcements')
+      .select('id,content,active,created_at')
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (data?.content) {
+      setAnnouncement({ active: true, content: data.content });
+    } else {
+      setAnnouncement({ active: false, content: '' });
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
     if (user.is_demo) {
@@ -91,6 +107,20 @@ export default function HomePage() {
       .channel('chat_messages_live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, () => {
         loadMessages();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  useEffect(() => {
+    loadAnnouncement();
+    const channel = supabase
+      .channel('announcements_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'global_announcements' }, () => {
+        loadAnnouncement();
       })
       .subscribe();
 
@@ -167,6 +197,22 @@ export default function HomePage() {
 
   const nameColor = (role: string) =>
     role === 'dios_admin' ? '#d946ef' : role === 'compi_pro' ? '#fbbf24' : '#9ca3af';
+
+  if (user?.banned) {
+    return (
+      <div className="min-h-screen relative flex items-center justify-center">
+        <CyberBackground />
+        <div className="relative z-10 text-center p-8">
+          <h1 className="font-black font-mono text-2xl mb-2" style={{ color: '#ef4444' }}>
+            ACCESO BLOQUEADO
+          </h1>
+          <p className="font-mono text-sm" style={{ color: '#fca5a5' }}>
+            Tu cuenta está baneada por el admin.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen relative">

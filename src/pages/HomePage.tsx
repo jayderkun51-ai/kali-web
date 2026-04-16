@@ -14,6 +14,7 @@ interface Message {
   role: 'super_pobre' | 'compi_pro' | 'dios_admin';
   content: string;
   time: string;
+  avatarUrl?: string | null;
 }
 
 const GLOBAL_ANNOUNCEMENT = {
@@ -43,12 +44,13 @@ export default function HomePage() {
     role: row.profiles?.role ?? 'super_pobre',
     content: row.content,
     time: new Date(row.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
+    avatarUrl: row.profiles?.avatar_url ?? null,
   });
 
   const loadMessages = async () => {
     const { data } = await supabase
       .from('chat_messages')
-      .select('id,user_id,content,created_at,profiles:user_id(username,role)')
+      .select('id,user_id,content,created_at,profiles:user_id(username,role,avatar_url)')
       .order('created_at', { ascending: true })
       .limit(120);
 
@@ -150,6 +152,7 @@ export default function HomePage() {
         role: user.role,
         content: input.trim(),
         time: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
+        avatarUrl: user.avatar_url ?? null,
       };
       setMessages(prev => [...prev, msg]);
       setWordCount(w => w + newWords);
@@ -313,6 +316,25 @@ export default function HomePage() {
                   <div className={`flex items-center gap-2 mb-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
                     {!isOwn && (
                       <>
+                        {msg.avatarUrl ? (
+                          <img
+                            src={msg.avatarUrl}
+                            alt=""
+                            className="w-6 h-6 rounded-full object-cover shrink-0"
+                            style={{ border: '1px solid rgba(168,85,247,0.35)' }}
+                          />
+                        ) : (
+                          <div
+                            className="w-6 h-6 rounded-full flex items-center justify-center font-mono font-bold text-[10px] shrink-0"
+                            style={{
+                              background: 'rgba(55,65,81,0.9)',
+                              border: '1px solid rgba(168,85,247,0.25)',
+                              color: '#e9d5ff',
+                            }}
+                          >
+                            {msg.username.charAt(0).toUpperCase()}
+                          </div>
+                        )}
                         <span className="font-mono font-bold text-xs" style={{ color: nameColor(msg.role) }}>
                           {msg.username}
                         </span>
@@ -325,6 +347,14 @@ export default function HomePage() {
                         <span className="font-mono font-bold text-xs" style={{ color: nameColor(msg.role) }}>
                           Tú
                         </span>
+                        {msg.avatarUrl ? (
+                          <img
+                            src={msg.avatarUrl}
+                            alt=""
+                            className="w-6 h-6 rounded-full object-cover shrink-0"
+                            style={{ border: '1px solid rgba(168,85,247,0.45)' }}
+                          />
+                        ) : null}
                       </>
                     )}
                     <span className="font-mono text-xs" style={{ color: '#2d1b69' }}>{msg.time}</span>

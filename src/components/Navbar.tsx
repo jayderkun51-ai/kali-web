@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { KaliLogo } from './svg/KaliLogo';
 import { RoleBadgeInline } from './svg/RoleBadge';
-import { HomeIcon, ChatIcon, PhotoIcon, AdminIcon, LogoutIcon, UserIcon } from './svg/Icons';
+import { HomeIcon, ChatIcon, PhotoIcon, AdminIcon, LogoutIcon, UserIcon, TrophyIcon } from './svg/Icons';
 
 export function Navbar() {
   const { user, signOut } = useAuth();
@@ -18,6 +18,11 @@ export function Navbar() {
     { path: '/home', label: 'MURO', icon: <HomeIcon size={18} color={location.pathname === '/home' ? '#a855f7' : '#6b21a8'} /> },
     { path: '/chat', label: 'CHAT', icon: <ChatIcon size={18} color={location.pathname === '/chat' ? '#a855f7' : '#6b21a8'} /> },
     { path: '/fotos', label: 'FOTOS', icon: <PhotoIcon size={18} color={location.pathname === '/fotos' ? '#a855f7' : '#6b21a8'} /> },
+    {
+      path: '/recompensas',
+      label: 'XP',
+      icon: <TrophyIcon size={18} color={location.pathname === '/recompensas' ? '#fbbf24' : '#6b21a8'} />,
+    },
     { path: '/perfil', label: 'PERFIL', icon: <UserIcon size={18} color={location.pathname === '/perfil' ? '#a855f7' : '#6b21a8'} /> },
     ...(user.role === 'dios_admin' ? [{ path: '/admin', label: 'ADMIN', icon: <AdminIcon size={18} color={location.pathname === '/admin' ? '#f97316' : '#6b21a8'} /> }] : []),
   ];
@@ -92,14 +97,18 @@ export function Navbar() {
           >
             {/* Avatar */}
             <div
-              className="w-7 h-7 rounded-full flex items-center justify-center font-mono font-black text-xs"
+              className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center font-mono font-black text-xs shrink-0"
               style={{
                 background: user.role === 'dios_admin' ? 'linear-gradient(135deg,#7c3aed,#d946ef)' : user.role === 'compi_pro' ? 'linear-gradient(135deg,#92400e,#b45309)' : 'rgba(55,65,81,0.8)',
                 color: '#fff',
                 boxShadow: user.role === 'dios_admin' ? '0 0 10px rgba(217,70,239,0.5)' : user.role === 'compi_pro' ? '0 0 10px rgba(251,191,36,0.3)' : 'none',
               }}
             >
-              {user.username.charAt(0).toUpperCase()}
+              {user.avatar_url ? (
+                <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                user.username.charAt(0).toUpperCase()
+              )}
             </div>
             <span className="hidden sm:block text-xs font-mono font-bold" style={{ color: user.role === 'dios_admin' ? '#d946ef' : user.role === 'compi_pro' ? '#fbbf24' : '#9ca3af' }}>
               {user.username.substring(0, 12)}

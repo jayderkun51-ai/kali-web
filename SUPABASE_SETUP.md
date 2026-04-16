@@ -60,3 +60,14 @@ Create these buckets in Supabase:
 For the current frontend implementation, set both buckets to **PUBLIC** so image URLs work via public URLs.
 If you prefer PRIVATE buckets, ask and we’ll switch the app to signed URLs.
 
+## 7) Realtime (chat + muro + anuncios sin “placebo”)
+Para que los `postgres_changes` lleguen al navegador, las tablas deben estar en la publicación `supabase_realtime`. Ejecuta en SQL Editor:
+
+- `supabase/realtime_publication.sql`
+
+Si una tabla ya estaba añadida, Postgres devolverá error “already member”; comenta esa línea y vuelve a ejecutar.
+
+## 8) Fotos de perfil (bucket `kali-avatars`)
+1. En **Storage → New bucket** crea **`kali-avatars`** como **público**.
+2. Ejecuta `supabase/storage_avatars.sql` en el SQL Editor (políticas por carpeta `userId/...`).
+

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { KaliLogo } from './components/svg/KaliLogo';
 import { Navbar } from './components/Navbar';
 import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import FotosPage from './pages/FotosPage';
 import AdminPage from './pages/AdminPage';
 import PerfilPage from './pages/PerfilPage';
+import RecompensasPage from './pages/RecompensasPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -30,11 +32,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
         style={{ background: '#000' }}
       >
         <div className="text-center font-mono">
-          <div
-            className="text-2xl font-black mb-3"
-            style={{ color: '#a855f7', animation: 'neon-pulse 1s infinite' }}
-          >
-            KALI-WEB
+          <div className="flex justify-center mb-3">
+            <KaliLogo size={88} />
           </div>
           <div style={{ color: '#39ff14', fontSize: '12px' }}>
             {'>'} Loading protocols...
@@ -116,6 +115,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <PerfilPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/recompensas"
+          element={
+            <ProtectedRoute>
+              <RecompensasPage />
             </ProtectedRoute>
           }
         />
